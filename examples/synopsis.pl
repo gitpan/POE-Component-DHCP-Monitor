@@ -22,6 +22,7 @@
         POE::Component::DHCP::Monitor->spawn(
                 alias => 'monitor',       # optional
                 port  => 67,              # default shown
+                port2 => 68,              # default shown
         );
     return;
   }

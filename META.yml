@@ -15,4 +15,4 @@ requires:
   Net::DHCP::Packet: 0.66
   POE: 0.38
   Socket: 0
-version: 0.05
+version: 0.06

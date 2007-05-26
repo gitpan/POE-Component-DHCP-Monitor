@@ -6,20 +6,21 @@ use Net::DHCP::Packet;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '0.05';
+$VERSION = '0.06';
 
 sub spawn {
   my $package = shift;
   my %opts = @_;
   $opts{lc $_} = delete $opts{$_} for keys %opts;
   $opts{prefix} = 'dhcp_monitor_' unless $opts{prefix};
+  $opts{port1} = $opts{port};
   $opts{prefix} .= '_' unless $opts{prefix} =~ /\_$/;
   my $options = delete $opts{options};
   my $self = bless \%opts, $package;
   $self->{session_id} = POE::Session->create(
 	object_states => [
 	    $self => { shutdown => '_shutdown', },
-	    $self => [qw(_start _sock_err _sock_up _dhcp_read register unregister)],
+	    $self => [qw(_start _sock_err _sock_up _sock_err2 _sock_up2 _dhcp_read register unregister)],
 	],
 	heap => $self,
 	( ref($options) eq 'HASH' ? ( options => $options ) : () ),
@@ -31,6 +32,12 @@ sub getsockname {
   my $self = shift;
   return unless $self->{socket};
   return getsockname( $self->{socket} );
+}
+
+sub getsockname2 {
+  my $self = shift;
+  return unless $self->{socket2};
+  return getsockname( $self->{socket2} );
 }
 
 sub session_id {
@@ -69,9 +76,18 @@ sub _start {
 
   $self->{factory} = POE::Wheel::SocketFactory->new(
         SocketProtocol => 'udp',
-        BindPort       => ( defined $self->{port} ? $self->{port} : 67 ),
+        BindPort       => ( defined $self->{port1} ? $self->{port1} : 67 ),
         SuccessEvent   => '_sock_up',
         FailureEvent   => '_sock_err',
+	($self->{address} ?
+	       (BindAddress => $self->{address}) : ()),
+  );
+
+  $self->{factory2} = POE::Wheel::SocketFactory->new(
+        SocketProtocol => 'udp',
+        BindPort       => ( defined $self->{port2} ? $self->{port2} : 68 ),
+        SuccessEvent   => '_sock_up2',
+        FailureEvent   => '_sock_err2',
 	($self->{address} ?
 	       (BindAddress => $self->{address}) : ()),
   );
@@ -82,7 +98,15 @@ sub _start {
 sub _sock_err {
   my ($kernel,$self,$operation,$errnum,$errstr,$wheel_id) = @_[KERNEL,OBJECT,ARG0..ARG3];
   delete $self->{factory};
-  $self->_send_event( $self->{prefix} . 'sockbinderr', "Wheel $wheel_id generated $operation error $errnum: $errstr" );
+  $self->_send_event( $self->{prefix} . 'sockbinderr', "Wheel $wheel_id generated $operation error $errnum: $errstr", 'Socket1' );
+  $kernel->yield( 'shutdown' );
+  return;
+}
+
+sub _sock_err2 {
+  my ($kernel,$self,$operation,$errnum,$errstr,$wheel_id) = @_[KERNEL,OBJECT,ARG0..ARG3];
+  delete $self->{factory};
+  $self->_send_event( $self->{prefix} . 'sockbinderr', "Wheel $wheel_id generated $operation error $errnum: $errstr", 'Socket2' );
   $kernel->yield( 'shutdown' );
   return;
 }
@@ -92,6 +116,20 @@ sub _sock_up {
   my ($kernel,$self,$dhcp_socket) = @_[KERNEL,OBJECT,ARG0];
   delete $self->{factory};
   $self->{socket} = $dhcp_socket;
+  unless ( setsockopt( $dhcp_socket, SOL_SOCKET, SO_BROADCAST, 1 ) ) {
+    $self->_send_event( $self->{prefix} . 'sockopterr', $! );
+    $kernel->yield( 'shutdown' );
+    return;
+  }
+  $kernel->select_read( $dhcp_socket, '_dhcp_read' );
+  $self->_send_event( $self->{prefix} . 'socket', getsockname( $dhcp_socket ) );
+  return;
+}
+
+sub _sock_up2 {
+  my ($kernel,$self,$dhcp_socket) = @_[KERNEL,OBJECT,ARG0];
+  delete $self->{factory2};
+  $self->{socket2} = $dhcp_socket;
   unless ( setsockopt( $dhcp_socket, SOL_SOCKET, SO_BROADCAST, 1 ) ) {
     $self->_send_event( $self->{prefix} . 'sockopterr', $! );
     $kernel->yield( 'shutdown' );
@@ -117,7 +155,7 @@ sub _dhcp_read {
     $self->_send_event( $self->{prefix} . 'sockpackerr', $@ );
     return;
   }
-  $self->_send_event( $self->{prefix} . 'packet', $packet );
+  $self->_send_event( $self->{prefix} . 'packet', $packet, ( sockaddr_in ( getsockname( $dhcp_socket ) ) )[0] );
   return;
 }
 
@@ -146,7 +184,9 @@ sub _shutdown {
   $kernel->alarm_remove_all();
   delete $self->{factory};
   my $socket = delete $self->{socket};
+  my $socket2 = delete $self->{socket2};
   $kernel->select_read( $socket ) if $socket;
+  $kernel->select_read( $socket2 ) if $socket2;
   $kernel->refcount_decrement( $_ => __PACKAGE__ ) for keys %{ $self->{sessions} };
   return;
 }
@@ -182,7 +222,8 @@ POE::Component::DHCP::Monitor - A simple POE Component for monitoring DHCP traff
     $heap->{monitor} = 
 	POE::Component::DHCP::Monitor->spawn(
 		alias => 'monitor',       # optional
-		port  => 67, 		  # default shown
+		port1  => 67, 		  # default shown
+		port2  => 68,		  # default shown
 		address => '192.168.1.1', # default is INADDR_ANY
 	);
     return;
@@ -217,6 +258,7 @@ Takes a number of arguments:
   'alias', an optional kernel alias to address the poco by;
   'address', set a particular IP address on a multi-homed box to bind to;
   'port', set a particular UDP port to listen on, default is 67;
+  'port2', set a particular UDP port to listen on, default is 67;
   'options', pass a hashref of POE session options;
   'prefix', optional set the output event prefix, default is 'dhcp_monitor_';
 
@@ -238,7 +280,11 @@ Terminates the poco, unregistering all registered sessions and closes the listen
 
 =item getsockname
 
-Returns the packed sockaddr address of this end of the socket connection.
+Returns the packed sockaddr address of this end of the first socket connection.
+
+=item getsockname2
+
+Returns the packed sockaddr address of this end of the second socket connection.
 
 =back
 
@@ -279,7 +325,7 @@ ARG0 will be the packed sockaddr address of the socket.
 =item dhcp_monitor_packet
 
 Sent by the component to 'registered' sessions when a DHCP packet is received and successfully 
-parsed. ARG0 will be a L<Net::DHCP::Packet>. 
+parsed. ARG0 will be a L<Net::DHCP::Packet>. ARG1 will be the port number this packet was received on.
 
 =item dhcp_monitor_registered
 
