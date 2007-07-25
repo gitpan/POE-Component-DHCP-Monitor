@@ -1,6 +1,9 @@
 POE::Component::DHCP::Monitor
 =============================
 
+0.07	Wed Jul 25 11:10:52 BST 2007
+	- Fixed abstract_from in Makefile.PL
+
 0.06	Sat May 26 12:32:07 BST 2007
 	- realised that I need to monitor both ports 67 and 68;
 	- added second socket symantics;
