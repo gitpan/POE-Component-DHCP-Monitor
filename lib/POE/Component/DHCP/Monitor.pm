@@ -1,12 +1,13 @@
 package POE::Component::DHCP::Monitor;
 
 use strict;
+use warnings;
 use POE qw(Wheel::SocketFactory);
 use Net::DHCP::Packet;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '0.08';
+$VERSION = '0.10';
 
 sub spawn {
   my $package = shift;
@@ -31,13 +32,13 @@ sub spawn {
 sub getsockname {
   my $self = shift;
   return unless $self->{socket};
-  return getsockname( $self->{socket} );
+  return CORE::getsockname( $self->{socket} );
 }
 
 sub getsockname2 {
   my $self = shift;
   return unless $self->{socket2};
-  return getsockname( $self->{socket2} );
+  return CORE::getsockname( $self->{socket2} );
 }
 
 sub session_id {
@@ -122,7 +123,7 @@ sub _sock_up {
     return;
   }
   $kernel->select_read( $dhcp_socket, '_dhcp_read' );
-  $self->_send_event( $self->{prefix} . 'socket', getsockname( $dhcp_socket ) );
+  $self->_send_event( $self->{prefix} . 'socket', CORE::getsockname( $dhcp_socket ) );
   return;
 }
 
@@ -136,7 +137,7 @@ sub _sock_up2 {
     return;
   }
   $kernel->select_read( $dhcp_socket, '_dhcp_read' );
-  $self->_send_event( $self->{prefix} . 'socket', getsockname( $dhcp_socket ) );
+  $self->_send_event( $self->{prefix} . 'socket', CORE::getsockname( $dhcp_socket ) );
   return;
 }
 
@@ -155,7 +156,7 @@ sub _dhcp_read {
     $self->_send_event( $self->{prefix} . 'sockpackerr', $@ );
     return;
   }
-  $self->_send_event( $self->{prefix} . 'packet', $packet, ( sockaddr_in ( getsockname( $dhcp_socket ) ) )[0] );
+  $self->_send_event( $self->{prefix} . 'packet', $packet, ( sockaddr_in ( CORE::getsockname( $dhcp_socket ) ) )[0] );
   return;
 }
 
