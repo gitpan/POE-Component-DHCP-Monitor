@@ -1,6 +1,9 @@
 POE::Component::DHCP::Monitor
 =============================
 
+0.12	Sat May 17 13:35:16 BST 2008
+	- Remove kwalitee test and added license information
+
 0.10	Thu Apr  3 12:09:45 BST 2008
 	- Kwalitee fixes.
 
