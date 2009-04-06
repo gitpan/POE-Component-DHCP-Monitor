@@ -4,21 +4,26 @@ author:
   - 'Chris Williams <chris@bingosnet.co.uk>'
 build_requires:
   Test::More: 0.47
+configure_requires:
+  ExtUtils::MakeMaker: 6.50
 distribution_type: module
-generated_by: 'Module::Install version 0.72'
+generated_by: 'Module::Install version 0.81'
 license: perl
 meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.3.html
-  version: 1.3
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
 name: POE-Component-DHCP-Monitor
 no_index:
   directory:
+    - examples
     - inc
     - t
 requires:
   Net::DHCP::Packet: 0.66
-  POE: 0.38
+  POE: 1.004
   POE::Wheel::SocketFactory: 0
-  Socket: 0
-  perl: 5.000
-version: 0.12
+  perl: 5.6.0
+resources:
+  license: http://dev.perl.org/licenses/
+  repository: git://github.com/bingos/poe-component-dhcp-monitor.git
+version: 1.00
